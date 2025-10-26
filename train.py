@@ -12,13 +12,25 @@ if pkg_resources.parse_version(current_torch_version) < pkg_resources.parse_vers
 # Print device information
 print(f"\n[INFO] Using device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
 
-# Enable CUDA optimizations
+# Enable CUDA optimizations and memory management
 if torch.cuda.is_available():
-    torch.backends.cudnn.benchmark = True  # Enable auto-tuner
+    # Enable auto-tuner and TF32
+    torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
-    # Set TF32 for better performance on Ampere GPUs (RTX 30xx+)
     torch.backends.cuda.matmul.fp32_precision = 'tf32'
     torch.backends.cudnn.conv.fp32_precision = 'tf32'
+    
+    # Memory management optimizations
+    torch.cuda.empty_cache()  # Clear any allocated memory
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'  # Avoid memory fragmentation
+    
+    # Print GPU info
+    gpu = torch.cuda.get_device_properties(0)
+    print(f"\n[INFO] Using GPU: {gpu.name} with {gpu.total_memory/1024**3:.1f}GB memory")
+    print(f"[INFO] CUDA Version: {torch.version.cuda}")
+    print(f"[INFO] PyTorch CUDA: {torch.version.cuda}")
+    if hasattr(torch.backends, 'cudnn'):
+        print(f"[INFO] cuDNN Version: {torch.backends.cudnn.version()}")
 import csv
 import json
 import argparse
@@ -361,8 +373,19 @@ def train(rank, world_size, config):
     # Run LR finder only on rank 0
     if rank == 0:
         print("Running learning rate finder...")
+        # Clear GPU memory before LR finder
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
         lr_finder = LRFinder(model, optimizer, criterion, device)
-        lr_finder.range_test(train_loader, end_lr=1, num_iter=200, smooth_f=0.05)
+        # Reduce iterations and batch size for LR finder to save memory
+        lr_finder.range_test(
+            train_loader,
+            end_lr=1,
+            num_iter=200,  # Reduced iterations
+            step_mode="exp",  # Exponential increase for faster search
+            smooth_f=0.05
+        )
         
         min_loss_lr = lr_finder.history['lr'][lr_finder.history['loss'].index(min(lr_finder.history['loss']))]
         suggested_lr = min_loss_lr / 10
@@ -434,8 +457,8 @@ def train(rank, world_size, config):
 
 class TrainingConfig:
     def __init__(self):
-        # Increase batch size for faster training
-        self.batch_size = 256  # Doubled batch size, adjust based on GPU memory
+        # Reduce batch size to avoid OOM
+        self.batch_size = 128  # Reduced batch size for memory efficiency
         self.epochs = 2
         self.learning_rate = 0.2
         self.weight_decay = 1e-4
@@ -444,10 +467,10 @@ class TrainingConfig:
         self.runs_dir = 'runs'
         self.logs_dir = 'logs'
         
-        # Enable gradient checkpointing to save memory
-        self.gradient_checkpointing = True
-        # Enable channels last memory format for better performance
-        self.channels_last = True
+        # Memory optimization flags
+        self.gradient_checkpointing = True  # Enable gradient checkpointing
+        self.channels_last = True  # Enable channels last memory format
+        self.empty_cache = True  # Empty CUDA cache between iterations
 
 def get_user_input():
     config = TrainingConfig()
