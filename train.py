@@ -293,7 +293,18 @@ def setup(rank, world_size):
     """Initialize distributed training"""
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    
+    # Set device ID explicitly to avoid warnings
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+    
+    dist.init_process_group(
+        backend="nccl",
+        init_method="env://",
+        world_size=world_size,
+        rank=rank,
+        device_id=rank  # Explicitly set device ID
+    )
 
 def cleanup():
     """Cleanup distributed training"""
@@ -317,16 +328,13 @@ def train(rank, world_size, config):
     torch.cuda.set_device(device)
     
     # Create data loaders with proper distributed setup
-    # Optimize data loading
+    # Create data loaders with proper distributed setup
     train_loader, val_loader = get_data_loaders(
         batch_size=config.batch_size,
         num_workers=min(8, os.cpu_count()),  # Increase workers but don't exceed CPU cores
         distributed=True,
         world_size=world_size,
-        rank=rank,
-        prefetch_factor=2,  # Prefetch 2 batches per worker
-        persistent_workers=True,  # Keep workers alive between epochs
-        pin_memory=True  # Pin memory for faster GPU transfer
+        rank=rank
     )
     
     # Create model (training from scratch)
