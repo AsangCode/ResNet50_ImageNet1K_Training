@@ -22,7 +22,7 @@ if torch.cuda.is_available():
     
     # Memory management optimizations
     torch.cuda.empty_cache()  # Clear any allocated memory
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'  # Avoid memory fragmentation
+    os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'  # Avoid memory fragmentation
     
     # Print GPU info
     gpu = torch.cuda.get_device_properties(0)
@@ -382,8 +382,7 @@ def train(rank, world_size, config):
         lr_finder.range_test(
             train_loader,
             end_lr=1,
-            num_iter=200,  # Reduced iterations
-            step_mode="exp",  # Exponential increase for faster search
+            num_iter=200,
             smooth_f=0.05
         )
         
