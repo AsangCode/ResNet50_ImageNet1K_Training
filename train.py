@@ -11,6 +11,14 @@ if pkg_resources.parse_version(current_torch_version) < pkg_resources.parse_vers
 
 # Print device information
 print(f"\n[INFO] Using device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
+
+# Enable CUDA optimizations
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True  # Enable auto-tuner
+    torch.backends.cudnn.enabled = True
+    # Set TF32 for better performance on Ampere GPUs (RTX 30xx+)
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 import csv
 import json
 import argparse
@@ -309,12 +317,16 @@ def train(rank, world_size, config):
     torch.cuda.set_device(device)
     
     # Create data loaders with proper distributed setup
+    # Optimize data loading
     train_loader, val_loader = get_data_loaders(
         batch_size=config.batch_size,
-        num_workers=config.num_workers,
+        num_workers=min(8, os.cpu_count()),  # Increase workers but don't exceed CPU cores
         distributed=True,
         world_size=world_size,
-        rank=rank
+        rank=rank,
+        prefetch_factor=2,  # Prefetch 2 batches per worker
+        persistent_workers=True,  # Keep workers alive between epochs
+        pin_memory=True  # Pin memory for faster GPU transfer
     )
     
     # Create model (training from scratch)
@@ -414,14 +426,20 @@ def train(rank, world_size, config):
 
 class TrainingConfig:
     def __init__(self):
-        self.batch_size = 128
+        # Increase batch size for faster training
+        self.batch_size = 256  # Doubled batch size, adjust based on GPU memory
         self.epochs = 2
         self.learning_rate = 0.2
         self.weight_decay = 1e-4
-        self.num_workers = 2
+        self.num_workers = min(8, os.cpu_count())  # Optimize based on CPU cores
         self.checkpoint_dir = 'checkpoints'
         self.runs_dir = 'runs'
         self.logs_dir = 'logs'
+        
+        # Enable gradient checkpointing to save memory
+        self.gradient_checkpointing = True
+        # Enable channels last memory format for better performance
+        self.channels_last = True
 
 def get_user_input():
     config = TrainingConfig()
