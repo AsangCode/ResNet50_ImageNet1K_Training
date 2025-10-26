@@ -1,0 +1,11 @@
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.21.0
+matplotlib>=3.4.3
+tqdm>=4.62.3
+requests>=2.26.0
+pillow>=8.3.1
+tensorboard>=2.7.0
+webdataset>=0.2.1
+boto3>=1.26.0  # For S3 access if needed
+fsspec>=2023.1.0  # For various filesystem access

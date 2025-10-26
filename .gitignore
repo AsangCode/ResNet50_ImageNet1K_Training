@@ -1,0 +1,47 @@
+# Dataset
+archive.zip
+imagenet100/
+ImageNet100/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Training outputs
+checkpoints/
+models/
+runs/
+logs/
+results/
+test_results/
+*.pth
+*.pt
+
+# AWS
+*.pem
+.aws/
+set_aws_credentials.sh
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tensorboard
+events.out.tfevents.*
+
+# Logs and temp files
+*.log
+*.csv
+*.json
+temp/
