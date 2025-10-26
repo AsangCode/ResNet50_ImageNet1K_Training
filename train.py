@@ -4,6 +4,7 @@ import torch
 import csv
 import json
 import argparse
+import warnings
 from datetime import datetime
 from torch.amp import autocast, GradScaler
 from lr_finder import LRFinder
@@ -14,6 +15,16 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+
+# Suppress all warnings
+warnings.filterwarnings('ignore')
+
+# Suppress PyTorch warnings
+torch.backends._dynamo.config.suppress_errors = True
+
+# Disable PyTorch logging
+os.environ["TORCH_LOGS"] = "0"
+os.environ["TORCH_CUDNN_WARN"] = "0"
 
 from model import create_model
 from dataset import get_data_loaders
@@ -91,6 +102,7 @@ def train_model(
         model.train()
         running_loss = torch.zeros(1).to(device)
         running_corrects = torch.zeros(1).to(device)
+        running_corrects_top5 = torch.zeros(1).to(device)  # Initialize top5 tensor
         total_samples = torch.zeros(1).to(device)
         
         train_iter = enumerate(train_loader)
@@ -130,7 +142,7 @@ def train_model(
             running_top1 = acc1.item() * inputs.size(0) / 100.0  # Convert back to correct count
             running_top5 = acc5.item() * inputs.size(0) / 100.0
             running_corrects += running_top1
-            running_corrects_top5 = running_top5
+            running_corrects_top5 += running_top5  # Changed from = to +=
             total_samples += inputs.size(0)
             
             if rank == 0 and isinstance(train_iter, tqdm):
@@ -382,7 +394,7 @@ class TrainingConfig:
         self.epochs = 2
         self.learning_rate = 0.2
         self.weight_decay = 1e-4
-        self.num_workers = 4
+        self.num_workers = 2
         self.checkpoint_dir = 'checkpoints'
         self.runs_dir = 'runs'
         self.logs_dir = 'logs'

@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from torch.distributed import DistributedDataParallel as DDP
-from torch.nn.parallel import DistributedDataParallel
+from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
 
 class ResNet50(nn.Module):
