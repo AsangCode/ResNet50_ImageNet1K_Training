@@ -17,8 +17,8 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True  # Enable auto-tuner
     torch.backends.cudnn.enabled = True
     # Set TF32 for better performance on Ampere GPUs (RTX 30xx+)
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.fp32_precision = 'tf32'
+    torch.backends.cudnn.conv.fp32_precision = 'tf32'
 import csv
 import json
 import argparse
