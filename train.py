@@ -1,6 +1,16 @@
 import os
 import math
 import torch
+import pkg_resources
+
+# Check PyTorch version
+MINIMUM_TORCH_VERSION = '2.0.0'
+current_torch_version = pkg_resources.get_distribution('torch').version
+if pkg_resources.parse_version(current_torch_version) < pkg_resources.parse_version(MINIMUM_TORCH_VERSION):
+    raise RuntimeError(f'PyTorch version should be >={MINIMUM_TORCH_VERSION}, but found {current_torch_version}')
+
+# Print device information
+print(f"\n[INFO] Using device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
 import csv
 import json
 import argparse
@@ -20,7 +30,8 @@ from tqdm import tqdm
 warnings.filterwarnings('ignore')
 
 # Suppress PyTorch warnings
-torch.backends._dynamo.config.suppress_errors = True
+if hasattr(torch.backends, 'cudnn'):
+    torch.backends.cudnn.benchmark = True
 
 # Disable PyTorch logging
 os.environ["TORCH_LOGS"] = "0"
