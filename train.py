@@ -14,11 +14,9 @@ print(f"\n[INFO] Using device: {'CUDA' if torch.cuda.is_available() else 'CPU'}"
 
 # Enable CUDA optimizations and memory management
 if torch.cuda.is_available():
-    # Enable auto-tuner and TF32
+    # Enable auto-tuner
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
-    torch.backends.cuda.matmul.fp32_precision = 'tf32'
-    torch.backends.cudnn.conv.fp32_precision = 'tf32'
     
     # Memory management optimizations
     torch.cuda.empty_cache()  # Clear any allocated memory
@@ -357,9 +355,7 @@ def train(rank, world_size, config):
         gradient_checkpointing=True
     )
     
-    if torch.cuda.is_available():
-        model = torch.compile(model)
-    
+    # Skip model compilation to avoid TF32 conflicts
     criterion = nn.CrossEntropyLoss()
     
     # Initialize optimizer with a low learning rate for LR finder
