@@ -237,23 +237,36 @@ def train_model(
             save_epoch_metrics(metrics, metrics_file, rank)
             
             # Save checkpoint if best model (based on top-1 accuracy)
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.module.state_dict() if isinstance(model, DDP) else model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'best_top1_acc': best_top1_acc,
+                'train_loss': epoch_loss,
+                'train_top1': epoch_top1,
+                'train_top5': epoch_top5,
+                'val_loss': val_loss,
+                'val_top1': val_top1,
+                'val_top5': val_top5,
+                'world_size': world_size
+            }
+            
+            # Save if it's the best model
             if val_top1 > best_top1_acc:
                 best_top1_acc = val_top1
-                checkpoint = {
-                    'epoch': epoch,
-                    'model_state_dict': model.module.state_dict() if isinstance(model, DDP) else model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'best_top1_acc': best_top1_acc,
-                    'train_loss': epoch_loss,
-                    'train_top1': epoch_top1,
-                    'train_top5': epoch_top5,
-                    'val_loss': val_loss,
-                    'val_top1': val_top1,
-                    'val_top5': val_top5,
-                    'world_size': world_size
-                }
                 torch.save(checkpoint, os.path.join(checkpoint_dir, f'best_model_{timestamp}.pth'))
+                print(f"\nNew best model saved! Top-1 Accuracy: {val_top1:.2f}%")
+            
+            # Also save a checkpoint for each epoch
+            torch.save(checkpoint, os.path.join(checkpoint_dir, f'epoch_{epoch+1}_model_{timestamp}.pth'))
+            
+            # Early stopping if top-1 accuracy reaches 75%
+            if val_top1 >= 75.0:
+                print(f"\n🎉 Reached target accuracy of 75%! Current Top-1: {val_top1:.2f}%")
+                print("Saving final model and stopping training...")
+                torch.save(checkpoint, os.path.join(checkpoint_dir, f'target_reached_model_{timestamp}.pth'))
+                return model
     
     return model
 
