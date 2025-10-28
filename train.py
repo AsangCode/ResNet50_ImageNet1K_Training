@@ -145,14 +145,15 @@ def train_model(
             if isinstance(labels, (list, tuple)):
                 labels = torch.stack(labels)
                 
-            inputs = inputs.to(device, memory_format=torch.channels_last)
-            labels = labels.to(device)
+            # Move data to GPU asynchronously
+            inputs = inputs.to(device, memory_format=torch.channels_last, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             
-            # Zero gradients
-            optimizer.zero_grad()
+            # Zero gradients (accumulate_grad_batches=1 for better GPU utilization)
+            optimizer.zero_grad(set_to_none=True)  # Slightly faster than zero_grad()
             
             # Forward pass with mixed precision
-            with autocast(device_type='cuda'):
+            with autocast(device_type='cuda', dtype=torch.float16):  # Use float16 for faster computation
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
             
@@ -281,14 +282,16 @@ def train_model(
                 'world_size': world_size
             }
             
-            # Save if it's the best model
+            # Save best model and periodic checkpoints
             if val_top1 > best_top1_acc:
                 best_top1_acc = val_top1
                 torch.save(checkpoint, os.path.join(checkpoint_dir, f'best_model_{timestamp}.pth'))
                 print(f"\nNew best model saved! Top-1 Accuracy: {val_top1:.2f}%")
             
-            # Also save a checkpoint for each epoch
-            torch.save(checkpoint, os.path.join(checkpoint_dir, f'epoch_{epoch+1}_model_{timestamp}.pth'))
+            # Save checkpoint every 5 epochs or on the last epoch
+            if (epoch + 1) % 5 == 0 or epoch == num_epochs - 1:
+                torch.save(checkpoint, os.path.join(checkpoint_dir, f'epoch_{epoch+1}_model_{timestamp}.pth'))
+                print(f"\nSaved checkpoint at epoch {epoch + 1}")
             
             # Early stopping if top-1 accuracy reaches 75%
             if val_top1 >= 75.0:
@@ -338,14 +341,18 @@ def train(rank, world_size, config):
     torch.cuda.set_device(device)
     
     # Create data loaders with proper distributed setup
-    # Create data loaders with proper distributed setup
+    # Optimize data loading for maximum GPU utilization
     train_loader, val_loader = get_data_loaders(
         batch_size=config.batch_size,
-        num_workers=min(8, os.cpu_count()),  # Increase workers but don't exceed CPU cores
+        num_workers=min(12, os.cpu_count() * 2),  # More workers for faster data loading
         distributed=True,
         world_size=world_size,
         rank=rank
     )
+    
+    # Enable non-blocking data transfers
+    torch.cuda.set_device(device)
+    torch.cuda.set_stream(torch.cuda.Stream())
     
     # Create model (training from scratch)
     model = create_model(
@@ -407,6 +414,7 @@ def train(rank, world_size, config):
         model.parameters(),
         lr=init_lr,
         momentum=0.9,
+        nesterov=True,  # Enable Nesterov momentum for better convergence
         weight_decay=config.weight_decay
     )
     
@@ -452,12 +460,12 @@ def train(rank, world_size, config):
 
 class TrainingConfig:
     def __init__(self):
-        # Reduce batch size to avoid OOM
-        self.batch_size = 128  # Reduced batch size for memory efficiency
-        self.epochs = 2
+        # Optimize batch size for T4 GPU
+        self.batch_size = 256  # Optimized for g5.2xlarge's 24GB GPU memory
+        self.epochs = 100
         self.learning_rate = 0.2
         self.weight_decay = 1e-4
-        self.num_workers = min(8, os.cpu_count())  # Optimize based on CPU cores
+        self.num_workers = min(12, os.cpu_count() * 2)  # Dynamic optimization based on available CPU cores
         self.checkpoint_dir = 'checkpoints'
         self.runs_dir = 'runs'
         self.logs_dir = 'logs'
