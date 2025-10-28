@@ -461,7 +461,7 @@ def train(rank, world_size, config):
 class TrainingConfig:
     def __init__(self):
         # Optimize batch size for T4 GPU
-        self.batch_size = 256  # Optimized for g5.2xlarge's 24GB GPU memory
+        self.batch_size = 128   # Reduced batch size to prevent OOM during LR finder
         self.epochs = 100
         self.learning_rate = 0.2
         self.weight_decay = 1e-4
