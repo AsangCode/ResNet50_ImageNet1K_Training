@@ -58,7 +58,7 @@ class Params:
         self.max_lr = 0.175
         self.momentum = 0.9
         self.weight_decay = 1e-4
-        self.epochs = 50
+        self.epochs = 65
         self.pct_start = 0.3
         self.div_factor = 25.0
         self.final_div_factor = 1e4
